@@ -1,0 +1,41 @@
+name: Performance Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build
+      run: npm run build
+    
+    - name: Start server
+      run: npm start &
+      env:
+        PORT: 3000
+    
+    - name: Wait for server
+      run: sleep 10
+    
+    - name: Run performance tests
+      run: npm run simulation
+      env:
+        BASE_URL: http://localhost:3000
+        TARGET_TPS: 500
+        DURATION: 60
