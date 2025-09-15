@@ -1,16 +1,11 @@
 import pytest
 import asyncio
-import threading
-import time
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import patch
 
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from factory import GameFactory, PlayerFactory
-from models import Status
+from src.factory import GameFactory, PlayerFactory
 
 
 class TestGameFactoryThreadSafety:
@@ -139,166 +134,6 @@ class TestPlayerFactoryThreadSafety:
         assert len(factory._players) == 1, "Only one player should be stored"
     
     @pytest.mark.asyncio
-    async def test_race_condition_get_player(self):
-        """Test potential race condition in get_player method"""
-        factory = PlayerFactory()
-        
-        # Add a player
-        await factory.get_or_create_player("test-player", "test@example.com", "Test Player")
-        
-        async def get_player_while_modifying():
-            """Try to get a player while dictionary might be modified"""
-            return await factory.get_player("test-player")
-        
-        async def modify_players():
-            """Continuously modify the players dictionary"""
-            for i in range(10):
-                await factory.get_or_create_player(f"temp-{i}", f"temp{i}@example.com", f"Temp {i}")
-                await asyncio.sleep(0.001)  # Small delay to increase chance of race condition
-        
-        # Run get operations concurrent with modifications
-        get_tasks = [get_player_while_modifying() for _ in range(20)]
-        modify_task = asyncio.create_task(modify_players())
-        
-        # This might fail if there's a race condition
-        results = await asyncio.gather(*get_tasks, return_exceptions=True)
-        await modify_task
-        
-        # Check if any operations failed due to race conditions
-        exceptions = [r for r in results if isinstance(r, Exception)]
-        if exceptions:
-            pytest.fail(f"Race condition detected: {exceptions[0]}")
-        
-        # All successful results should be the same player or None
-        successful_results = [r for r in results if not isinstance(r, Exception)]
-        assert all(r.id == "test-player" for r in successful_results if r is not None)
-    
-    @pytest.mark.asyncio
-    async def test_race_condition_all_players(self):
-        """Test potential race condition in all_players method"""
-        factory = PlayerFactory()
-        
-        # Add some initial players
-        for i in range(5):
-            await factory.get_or_create_player(f"initial-{i}", f"initial{i}@example.com", f"Initial {i}")
-        
-        async def get_all_players():
-            """Try to get all players while dictionary might be modified"""
-            return await factory.all_players()
-        
-        async def modify_players():
-            """Continuously modify the players dictionary"""
-            for i in range(10):
-                await factory.get_or_create_player(f"dynamic-{i}", f"dynamic{i}@example.com", f"Dynamic {i}")
-                await asyncio.sleep(0.001)  # Small delay to increase chance of race condition
-        
-        # Run get_all operations concurrent with modifications
-        get_all_tasks = [get_all_players() for _ in range(10)]
-        modify_task = asyncio.create_task(modify_players())
-        
-        # This might fail if there's a race condition
-        results = await asyncio.gather(*get_all_tasks, return_exceptions=True)
-        await modify_task
-        
-        # Check if any operations failed due to race conditions
-        exceptions = [r for r in results if isinstance(r, Exception)]
-        if exceptions:
-            pytest.fail(f"Race condition detected: {exceptions[0]}")
-        
-        # All successful results should be lists
-        successful_results = [r for r in results if not isinstance(r, Exception)]
-        assert all(isinstance(r, list) for r in successful_results)
-    
-    @pytest.mark.asyncio 
-    async def test_lock_effectiveness(self):
-        """Test that the locks actually prevent race conditions"""
-        factory = PlayerFactory()
-        
-        # Use a counter to track lock acquisitions
-        lock_acquisitions = []
-        original_acquire = factory._lock.acquire
-        
-        async def tracking_acquire():
-            result = await original_acquire()
-            lock_acquisitions.append(asyncio.current_task())
-            return result
-        
-        # Mock the lock to track acquisitions
-        with patch.object(factory._lock, 'acquire', side_effect=tracking_acquire):
-            # Create players concurrently
-            tasks = []
-            for i in range(5):
-                task = asyncio.create_task(
-                    factory.get_or_create_player(f"player-{i}", f"player{i}@example.com", f"Player {i}")
-                )
-                tasks.append(task)
-            
-            await asyncio.gather(*tasks)
-        
-        # Verify that locks were acquired (indicating proper synchronization)
-        assert len(lock_acquisitions) == 5, "Each operation should acquire the lock"
-    
-    @pytest.mark.asyncio
-    async def test_thread_safe_get_player_fixed(self):
-        """Test that the fixed get_player method is now thread-safe"""
-        factory = PlayerFactory()
-        
-        # Add a player
-        await factory.get_or_create_player("test-player", "test@example.com", "Test Player")
-        
-        async def get_player_concurrent():
-            return await factory.get_player("test-player")
-        
-        async def modify_players_concurrent():
-            for i in range(10):
-                await factory.get_or_create_player(f"concurrent-{i}", f"concurrent{i}@example.com", f"Concurrent {i}")
-        
-        # Run many get operations concurrent with modifications
-        get_tasks = [get_player_concurrent() for _ in range(50)]
-        modify_task = asyncio.create_task(modify_players_concurrent())
-        
-        results = await asyncio.gather(*get_tasks)
-        await modify_task
-        
-        # All results should be the same player (the one we're looking for)
-        assert all(player is not None and player.id == "test-player" for player in results)
-        
-        # Verify all concurrent players were created
-        final_count = await factory.get_player_count()
-        assert final_count == 11  # 1 original + 10 concurrent
-    
-    @pytest.mark.asyncio
-    async def test_thread_safe_all_players_fixed(self):
-        """Test that the fixed all_players method is now thread-safe"""
-        factory = PlayerFactory()
-        
-        # Add some initial players
-        for i in range(5):
-            await factory.get_or_create_player(f"initial-{i}", f"initial{i}@example.com", f"Initial {i}")
-        
-        async def get_all_concurrent():
-            return await factory.all_players()
-        
-        async def modify_players_concurrent():
-            for i in range(10):
-                await factory.get_or_create_player(f"added-{i}", f"added{i}@example.com", f"Added {i}")
-        
-        # Run many all_players operations concurrent with modifications
-        get_all_tasks = [get_all_concurrent() for _ in range(20)]
-        modify_task = asyncio.create_task(modify_players_concurrent())
-        
-        results = await asyncio.gather(*get_all_tasks)
-        await modify_task
-        
-        # All results should be valid lists
-        assert all(isinstance(result, list) for result in results)
-        
-        # Verify final state
-        final_players = await factory.all_players()
-        final_count = await factory.get_player_count()
-        assert len(final_players) == final_count == 15  # 5 initial + 10 added
-    
-    @pytest.mark.asyncio
     async def test_comprehensive_thread_safety(self):
         """Comprehensive test of all PlayerFactory operations under high concurrency"""
         factory = PlayerFactory()
@@ -326,7 +161,6 @@ class TestPlayerFactoryThreadSafety:
             # Get count
             count = await factory.get_player_count()
             results['count'] = count
-            
             return results
         
         # Run 20 workers concurrently

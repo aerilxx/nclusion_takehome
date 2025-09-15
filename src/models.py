@@ -47,7 +47,7 @@ class Player(BaseModel):
     stats: Optional[PlayerStats] = None
 
     def update_stats(self, won: bool, moves: int, draw: bool = False):
-        # Once game completed, update the stats for both player
+        """Once game completed, update the stats for both player"""
         self.stats.gamesPlayed += 1
         # assume moves are accumulated acorss different game 
         self.stats.totalMoves += moves
@@ -132,21 +132,23 @@ class Game(BaseModel):
             self.board[row][col] = symbol
             self.updatedAt = datetime.now()
             self.moves.append(
-                {"id": f"m-{len(self.moves)+1}", 
-                "gameId": self.id, 
-                "playerId": player_id,
-                "row": row, 
-                "col": col, 
-                "timestamp": datetime.now().isoformat()}
+                Move(
+                    id=f"m-{len(self.moves)+1}", 
+                    gameId=str(self.id), 
+                    playerId=player_id,
+                    row=row, 
+                    col=col, 
+                    timestamp=datetime.now()
+                )
             )
 
             over = self.check_if_game_is_over()
             if over:
-                self.status = Status.DONE
+                self.status = Status.COMPLETE
                 self.winnerId = player_id if over != "TIE" else None
                 await self.end_game()
             else:
-                self.currentPlayerId = self.players[1] if self.currentPlayerId == self.players[0] else self.players[0]
+                self.currentPlayerId = self.players[1].id if self.currentPlayerId == self.players[0].id else self.players[0].id
             print(f"After move: currentPlayerId={self.currentPlayerId}")
             return True 
         
@@ -159,4 +161,3 @@ class Game(BaseModel):
             draw = won is None
             player.update_stats(won=won, moves=moves_in_game, draw=draw)
         logger.info(f"Game {self.id} ended. Winner: {self.winnerId or 'Draw'}")
-

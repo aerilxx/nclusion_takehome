@@ -7,7 +7,9 @@ from .factory import GameFactory, PlayerFactory
 from .models import Status
 
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 games = APIRouter(prefix="/games")
 leaderboard = APIRouter(prefix="/leaderboard")
@@ -30,7 +32,9 @@ player_factory = PlayerFactory()
 
 @games.post("")
 async def create_game(body: CreateGameRequest):
-    game_name = body.name or f"Game {game_factory._next_id + 1}"
+    # Use safe method to get next ID preview (for display purposes)
+    current_count = await game_factory.get_game_count()
+    game_name = body.name or f"Game {current_count + 1}"
     logging.info(f"Game {game_name} is On.")
     game = await game_factory.create_game(game_name)
     return {
@@ -51,7 +55,7 @@ async def get_game(id: int):
 
 
 @games.get("/{id}/status")
-async def get_status(id: str):
+async def get_status(id: int):
     game = await game_factory.get_game(id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -78,12 +82,16 @@ async def join_game(id: int, body: JoinGameRequest):
     if any(p.id == body.playerId for p in game.players):
         raise HTTPException(status_code=400, detail="Player already in the game")
     
-    if all(p.id != player.id for p in game.players):
-        game.players.append(player)
-    if len(game.players) == 2:
-        game.status = Status.IN_PROGRESS
-        game.currentPlayerId = game.players[0].id
-        logging.info("Game is good to start.")
+    # Use thread-safe game modification through the game's own lock, avoid
+    # additional player join while it's locked
+    async with game.lock:
+        # deduplicate player in the same game
+        if all(p.id != player.id for p in game.players):
+            game.players.append(player)
+        if len(game.players) == 2:
+            game.status = Status.IN_PROGRESS
+            game.currentPlayerId = game.players[0].id
+            logging.info("Game is good to start.")
     return {"message": f"{player.id} Successfully joined game {id}"}
 
 
@@ -107,25 +115,26 @@ async def make_move(id: int, body: MakeMoveRequest):
 async def list_games(status: Optional[str] = None):
     """List all games or games under different status
     """
-    games = list(game_factory._games.values())
+    games = await game_factory.get_all_games()
     if status:
-        games = [g for g in games if g.status == status]
-    else:
-        games_list = games
-     # Convert Pydantic models to dicts for JSON serialization
+        games = [g for g in games if g.status == status]    
     games_list = [g.id for g in games]
-    return {f"{status} games": games_list, "count": len(games_list)}
+    status_label = status if status else "all"
+    return {f"{status_label} games": games_list, "count": len(games_list)}
 
 
 @games.delete("/{id}")
-def delete_game(id: str):
-    game = game_factory.get_game(id)
+async def delete_game(id: int):
+    """Use thread-safe removal method to remove a game"""
+    game = await game_factory.get_game(id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
-    if game.status == Status.in_progress:
+    if game.status == Status.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Cannot delete an active game")
-    game_factory.pop(id, None)
-    return Response(status_code=200)
+    removed = await game_factory.remove_game(id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return {"message": f"Game {id} deleted successfully"}
 
 
 @leaderboard.get("/wins")
@@ -133,7 +142,9 @@ async def leaderboard_wins(page: int = Query(1, ge=1), limit: int = Query(10, ge
     """Returns leaderboard sorted by total wins.
     """
     all_players = await player_factory.all_players()
-    sorted_players = sorted(all_players, key=lambda p: p.stats.gamesWon, reverse=True)
+    # Filter players with stats and sort by wins
+    players_with_stats = [p for p in all_players if p.stats is not None]
+    sorted_players = sorted(players_with_stats, key=lambda p: p.stats.gamesWon, reverse=True)
 
     start = (page - 1) * limit
     end = start + limit
@@ -166,7 +177,9 @@ async def leaderboard_efficiency(page: int = Query(1, ge=1), limit: int = Query(
     """Returns leaderboard sorted by player efficiency.
     """
     all_players = await player_factory.all_players()
-    sorted_players = sorted(all_players, key=lambda p: p.stats.efficiency, reverse=True)
+    # Filter players with stats and sort by efficiency, this avoid sorting error if players has no stats
+    players_with_stats = [p for p in all_players if p.stats is not None]
+    sorted_players = sorted(players_with_stats, key=lambda p: p.stats.efficiency, reverse=True)
 
     start = (page - 1) * limit
     end = start + limit
