@@ -236,12 +236,12 @@ python -m pytest tests/test_factory_threading.py -v
 ## 🛠️ Design concerns
 
 ### Thread Safety
-- **Async Locks**: All factory operations use `asyncio.Lock()` for thread safety
-- **Game Locks**: Individual games have locks for move synchronization
-- **Atomic Operations**: All state modifications are properly synchronized
+- **Async Locks**: All factory operations use `asyncio.Lock()` for thread safety, ensure multi games can be on the same time.
+- **Atomic Operations**: All state modifications are properly synchronized, move all function into thread-safe factory instead of put functions in routes
+- **Player metrics**: Use factory design to ensure players can play multipile games, avoid calculate combination in leaderboard page. 
 
 
-## TODOs
+## Requirements
 - ✅ Add request logging middleware
 - ✅ Implement Python models for Game and Player with in-memory store
 - ✅ Complete games routes (status, join, moves, stats, delete, list)
@@ -266,5 +266,5 @@ promethues registry)
 
 1. Using ChatGPT to gnerate the README and function level doumentation
 2. Using Postman for API documentation
-3. Using ChatGPT to format beautiful matrix in the shell script
+3. Using ChatGPT to format beautiful matrix in the shell script, fix typo and generate more comprehensive unit test
 4. Black for auto fix linting.
