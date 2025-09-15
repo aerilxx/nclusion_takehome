@@ -1,4 +1,4 @@
-# Tic-Tac-Toe Game API
+# Game API
 
 A robust, thread-safe FastAPI-based tic-tac-toe game with player
 statistics and leaderboards.
@@ -118,6 +118,7 @@ curl -s -X POST "http://localhost:8000/games/1/join" \
 "message": "alice Successfully joined game 1"
 }
 ```
+
 Raise error if playerID, email are not properly provided.
 
 
@@ -210,11 +211,12 @@ curl -s -X GET "http://localhost:8000/leaderboard/efficiency?page=1&limit=10"
 ### Run Unit Tests
 ```bash
 # Run all tests
-python -m pytest tests/ -v
+pytest
 
 # Run specific test files
 python -m pytest tests/test_models.py -v
-python -m pytest tests/test_factory_threading.py -v
+# TODO: Fix package import to run multi-threading test
+python -m pytest tests/test_factory_threading.py -v 
 ```
 
 
