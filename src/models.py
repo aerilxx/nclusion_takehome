@@ -108,6 +108,7 @@ class Game(BaseModel):
         and ease of maintain. Also improve threading-safe easier.
         """
         async with self.lock:
+            print(f"Before move: currentPlayerId={self.currentPlayerId}")
             if self.status != Status.IN_PROGRESS:
                 logger.error(f"Game is not active!")
                 return False
@@ -124,7 +125,10 @@ class Game(BaseModel):
                 logger.error("Cell is already occupied!")
                 return False
 
-            symbol = "X" if self.players.index(player_id) == 0 else "O"
+            player_index = next((i for i, player in enumerate(self.players) if player.id == player_id), -1)
+            if player_index == -1:
+                raise ValueError(f"Player ID '{player_id}' not found in the game.")
+            symbol = "X" if player_index == 0 else "O"
             self.board[row][col] = symbol
             self.updatedAt = datetime.now()
             self.moves.append(
@@ -143,6 +147,7 @@ class Game(BaseModel):
                 await self.end_game()
             else:
                 self.currentPlayerId = self.players[1] if self.currentPlayerId == self.players[0] else self.players[0]
+            print(f"After move: currentPlayerId={self.currentPlayerId}")
             return True 
         
     async def end_game(self):
