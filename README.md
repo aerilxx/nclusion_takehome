@@ -1,129 +1,270 @@
-# Backend SWE Take-Home Assignment - Python
+# Tic-Tac-Toe Game API
 
-## Overview
+A robust, thread-safe FastAPI-based tic-tac-toe game with player
+statistics and leaderboards.
 
-This is a **3-4 hour take-home assignment**. You will build a small, network-accessible backend web service that manages a turn-based, grid-driven game from pre-defined rules. Your assignment is tailored: a randomized (but reproducible) set of TODOs, features, and bugs has been embedded inline.
+## 📋 Requirements
 
-You should focus on:
-- Clear, maintainable API handlers and service logic
-- Robust input validation and error handling
-- Simple, reliable tests (unit and integration)
-- Helpful logs/metrics stubs where applicable
+- Python 3.11
+- FastAPI
+- Pydantic (In-memory DB)
+- Uvicorn (for running the server)
 
-## Getting Started
+## ⚙️ Installation & Setup
 
-### Prerequisites
+### 1. Clone and Navigate
+```bash
+cd /path/to/folder
+```
 
-- Python 3.11 or higher
-- pip or uv
-
-### Installation
-
+### 2. Install Dependencies
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Running the Application
-
+### 3. Run the Server
 ```bash
-uvicorn src.main:app --reload --port 8000
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The application will start on port 8000.
+The API will be available at: `http://localhost:8000`
 
-### Running Tests
-
+## 🎮 API Usage Demo
 ```bash
-pytest
+/.demo_game.sh
 ```
 
-### Running the Simulation
-
-> Optional: You may create a simple simulation script or test that spins up your server, plays multiple sessions concurrently, and prints a small leaderboard summary.
-
-## Project Structure
-
-```
-src/
-├── main.py
-├── models.py
-├── routes.py
-└── services.py
-```
-
-## What You Need to Implement
-
-### Selected Tasks
-
-#### TODOs
-- Add request logging middleware
-- Implement Python models for Game and Player with in-memory store
-- Complete games routes (status, join, moves, stats, delete, list)
-- Add Python unit tests for models (Game/Player)
-- Add player email validation
-- Add validation for game creation and move inputs
-- Complete players routes (update, delete, search)
-- Validate Player model (name/email uniqueness, format)
-- Standardize service error handling and messages
-
-#### Feature Requests
-- Add basic request metrics with prom-client
-
-#### Bugs To Fix
-- Move bounds check off-by-one allows row&#x3D;3 or col&#x3D;3 (symptom: )
-
-### Core Requirements (high-level)
-
-1. Turn-based rules on a finite grid with obvious invalid-move conditions
-2. Multiple sessions can run concurrently; two players start a session
-3. End a session on win or draw; expose session status
-4. Leaderboard endpoint returning top users by wins or "efficiency" (lower moves per win is better)
-5. A small simulation or test path that exercises the API
-
-Additionally, look for inline TODOs in language-appropriate files. Examples:
-- Python: `src/routes.py`, `src/models.py`, `src/main.py`
-
-> Focus on correctness, quality, and clarity. If you finish early, feel free to polish or extend.
-
-## Notes
-
-- Inline TODOs are your primary guide. GitHub Issues are intentionally disabled.
-- Keep commits small and frequent with clear messages.
-- You may add libraries if they help you implement tasks cleanly.
-
-## Quick API Examples
-
-Assuming your server is running on http://localhost:8000
-
-Create a game
+#### Create a New Game
 ```bash
-curl -s -X POST http://localhost:8000/games -H 'Content-Type: application/json' -d '{"name":"Sample"}' | jq .
+curl -s -X POST "http://localhost:8000/games" \
+-H "Content-Type: application/json" \
+-d '{"name": "My Awesome Game"}' | jq
 ```
 
-Join the game
+**Response:**
+```json
+{
+"game": {
+"id": 1,
+"name": "My Awesome Game"
+},
+"message": "Game 1 created successfully"
+}
+```
+
+#### Get Game Status
 ```bash
-GAME_ID=<paste-from-create>
-curl -s -X POST http://localhost:8000/games/$GAME_ID/join -H 'Content-Type: application/json' -d '{"playerId":"player-1"}' | jq .
-curl -s -X POST http://localhost:8000/games/$GAME_ID/join -H 'Content-Type: application/json' -d '{"playerId":"player-2"}' | jq .
+curl -s -X GET "http://localhost:8000/games/1/status" | jq
 ```
 
-Make a move and get status
+**Response:**
+```json
+{
+"status": {
+"id": 1,
+"status": "pending",
+"board": [["", "", ""], ["", "", ""], ["", "", ""]],
+"currentPlayerId": null,
+"winnerId": null,
+"players": [],
+"moves": []
+}
+}
+```
+
+#### List All Games
 ```bash
-curl -s -X POST http://localhost:8000/games/$GAME_ID/moves -H 'Content-Type: application/json' -d '{"playerId":"player-1","row":0,"col":0}' | jq .
-curl -s http://localhost:8000/games/$GAME_ID/status | jq .
+# Get all games
+curl -s -X GET "http://localhost:8000/games/" | jq
+
+# Get games by status
+curl -s -X GET "http://localhost:8000/games/?status=in_progress" | jq
+curl -s -X GET "http://localhost:8000/games/?status=pending" | jq
+curl -s -X GET "http://localhost:8000/games/?status=complete" | jq
 ```
 
-Leaderboard (optional)
+#### Delete a Game
 ```bash
-curl -s http://localhost:8000/leaderboard | jq .
+curl -s -X DELETE "http://localhost:8000/games/1" | jq
 ```
 
-## Submission
+### Player Management & Game Play
 
-1. Ensure tests pass
-2. Run the simulation script
-3. Update this README with any setup notes
-4. Submit your repository URL
+#### Join a Game
+```bash
+# Player 1 joins
+curl -s -X POST "http://localhost:8000/games/1/join" \
+-H "Content-Type: application/json" \
+-d '{
+"playerId": "alice",
+"name": "Alice Smith",
+"email": "alice@example.com"
+}' | jq
 
-Good luck! 🚀
+# Player 2 joins (game will start automatically)
+curl -s -X POST "http://localhost:8000/games/1/join" \
+-H "Content-Type: application/json" \
+-d '{
+"playerId": "bob",
+"name": "Bob Johnson",
+"email": "bob@example.com"
+}' | jq
+```
+
+**Response:**
+```json
+{
+"message": "alice Successfully joined game 1"
+}
+```
+Raise error if playerID, email are not properly provided.
+
+
+#### Make a Move
+```bash
+# Alice makes first move (top-left corner)
+curl -s -X POST "http://localhost:8000/games/1/moves" \
+-H "Content-Type: application/json" \
+-d '{
+"playerId": "alice",
+"row": 0,
+"col": 0
+}' | jq
+
+# Bob makes second move (center)
+curl -s -X POST "http://localhost:8000/games/1/moves" \
+-H "Content-Type: application/json" \
+-d '{
+"playerId": "bob",
+"row": 1,
+"col": 1
+}' | jq
+```
+
+**Response:**
+```json
+{
+"game": [["X", "", ""], ["", "", ""], ["", "", ""]],
+"message": "Move made successfully",
+"move": [0, 0],
+"status": "in_progress"
+}
+```
+
+### Leaderboards
+
+#### Get Wins Leaderboard
+```bash
+# Default: page 1, limit 10
+curl -s -X GET "http://localhost:8000/leaderboard/wins" | jq
+
+# With pagination
+curl -s -X GET "http://localhost:8000/leaderboard/wins?page=1&limit=5" | jq
+```
+
+**Response:**
+```json
+{
+"leaderboard": [
+{
+"id": "alice",
+"name": "Alice Smith",
+"email": "alice@example.com",
+"gamesPlayed": 5,
+"gamesWon": 4,
+"gamesLost": 1,
+"gamesDrawn": 0,
+"totalMoves": 20,
+"averageMovesPerWin": 5.0,
+"efficiency": 5.0,
+"winRate": 0.8
+}
+],
+"type": "wins"
+}
+```
+
+#### Get Efficiency Leaderboard
+```bash
+curl -s -X GET "http://localhost:8000/leaderboard/efficiency?page=1&limit=10"
+| jq
+```
+
+
+### Winning Conditions
+- **Rows**: Three in a row horizontally
+- **Columns**: Three in a row vertically
+- **Diagonals**: Three in a row diagonally
+- **Tie**: Board full with no winner
+
+### Game Flow
+1. Create game (status: `pending`)
+2. Players join (2 players required)
+3. Game starts automatically (status: `in_progress`)
+4. Players alternate moves (X goes first)
+5. Game ends when someone wins or board is full (status: `complete`)
+
+## 🧪 Testing
+
+### Run Unit Tests
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test files
+python -m pytest tests/test_models.py -v
+python -m pytest tests/test_factory_threading.py -v
+```
+
+
+## 📊 API Endpoints Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/games` | Create a new game |
+| `GET` | `/games/{id}` | Get game by ID |
+| `GET` | `/games/{id}/status` | Get detailed game status |
+| `GET` | `/games/` | List all games (with optional status filter) |
+| `POST` | `/games/{id}/join` | Join a game |
+| `POST` | `/games/{id}/moves` | Make a move |
+| `DELETE` | `/games/{id}` | Delete a game |
+| `GET` | `/leaderboard/wins` | Get leaderboard by wins |
+| `GET` | `/leaderboard/efficiency` | Get leaderboard by efficiency |
+
+
+## 🛠️ Design concerns
+
+### Thread Safety
+- **Async Locks**: All factory operations use `asyncio.Lock()` for thread safety
+- **Game Locks**: Individual games have locks for move synchronization
+- **Atomic Operations**: All state modifications are properly synchronized
+
+
+## TODOs
+- ✅ Add request logging middleware
+- ✅ Implement Python models for Game and Player with in-memory store
+- ✅ Complete games routes (status, join, moves, stats, delete, list)
+- ✅ Add Python unit tests for models (Game/Player)
+- ✅ Add player email validation
+- ✅ Add validation for game creation and move inputs
+- ✅ Complete players routes (update, delete, search)
+- ✅ Validate Player model (name/email uniqueness, format)
+- ✅ Standardize service error handling and messages
+- ❌ Add basic request metrics with prom-client (Not formaliar with
+promethues registry)
+
+
+### Structure
+- **Models**: Pydantic models for data validation (`models.py`)
+- **Factories**: Thread-safe object creation and management (`factory.py`)
+- **Routes**: RESTful API endpoints (`routes.py`)
+- **Main**: FastAPI application setup (`main.py`)
+
+
+## 🤝 AI Contributing
+
+1. Using ChatGPT to gnerate the README and function level doumentation
+2. Using Postman for API documentation
+3. Using ChatGPT to format beautiful matrix in the shell script
+4. Black for auto fix linting.
